@@ -180,3 +180,144 @@ def load_match_stats(league: League, n_seasons: int = 3, today: date | None = No
     if not frames:
         return pd.DataFrame(columns=[*RESULT_COLUMNS, *STAT_COLUMNS.values()])
     return pd.concat(frames, ignore_index=True).sort_values("date").reset_index(drop=True)
+
+
+# --- Historia kursów do backtestu (F2, ADR 0015) ------------------------------------------
+
+DOWNLOAD_PAUSE_S = 2.0
+
+# Prefiks znormalizowany -> lista kandydatów nazw kolumn (pierwsza istniejąca wygrywa).
+# Pinnacle przedmeczowy (PSH…) to kurs z chwili zbierania danych przez football-data
+# (zwykle pt. po południu dla weekendu, wt. dla środka tygodnia) — „kurs w chwili decyzji”.
+# PSCH… to zamknięcie — WYŁĄCZNIE do CLV.
+_ODDS_SOURCES: dict[str, dict[str, list[str]]] = {
+    "pin_open": {
+        "home": ["PSH"],
+        "draw": ["PSD"],
+        "away": ["PSA"],
+        "over": ["P>2.5"],
+        "under": ["P<2.5"],
+    },
+    "pin_close": {
+        "home": ["PSCH"],
+        "draw": ["PSCD"],
+        "away": ["PSCA"],
+        "over": ["PC>2.5"],
+        "under": ["PC<2.5"],
+    },
+    "avg": {
+        "home": ["AvgH", "BbAvH"],
+        "draw": ["AvgD", "BbAvD"],
+        "away": ["AvgA", "BbAvA"],
+        "over": ["Avg>2.5", "BbAv>2.5"],
+        "under": ["Avg<2.5", "BbAv<2.5"],
+    },
+    "max": {
+        "home": ["MaxH", "BbMxH"],
+        "draw": ["MaxD", "BbMxD"],
+        "away": ["MaxA", "BbMxA"],
+        "over": ["Max>2.5", "BbMx>2.5"],
+        "under": ["Max<2.5", "BbMx<2.5"],
+    },
+    "avg_close": {
+        "home": ["AvgCH"],
+        "draw": ["AvgCD"],
+        "away": ["AvgCA"],
+    },
+    "max_close": {
+        "home": ["MaxCH"],
+        "draw": ["MaxCD"],
+        "away": ["MaxCA"],
+    },
+    "b365": {"home": ["B365H"], "draw": ["B365D"], "away": ["B365A"], "over": ["B365>2.5"], "under": ["B365<2.5"]},
+    "bw": {"home": ["BWH"], "draw": ["BWD"], "away": ["BWA"]},
+    "wh": {"home": ["WHH"], "draw": ["WHD"], "away": ["WHA"]},
+    "x1b": {"home": ["1XBH"], "draw": ["1XBD"], "away": ["1XBA"]},
+}
+SOFT_BOOKS = ("b365", "bw", "wh", "x1b")
+OUTCOMES_1X2 = ("home", "draw", "away")
+OUTCOMES_OU = ("over", "under")
+
+
+def _season_label(start_year: int) -> str:
+    return f"{start_year}/{start_year + 1}"
+
+
+def normalize_odds_history(df: pd.DataFrame, kind: str, season: str | None = None) -> pd.DataFrame:
+    """Wyniki + wszystkie kursy potrzebne w backteście, w jednolitych kolumnach.
+
+    Kolumny kursów: `{prefix}_{outcome}` dla prefiksów z `_ODDS_SOURCES` oraz
+    `max_soft_*` = max z kursów nazwanych miękkich buków (B365, BW, WH, 1XB; dla O/U tylko B365).
+    Brakujące kolumny są NaN. `season` dla plików głównych podaje wywołujący,
+    dla pliku POL bierzemy kolumnę Season.
+    """
+    work = df.copy()
+    work["date"] = pd.to_datetime(work["Date"], dayfirst=True, format="mixed", errors="coerce")
+    team_cols = ("Home", "Away", "HG", "AG") if kind == "extra" else ("HomeTeam", "AwayTeam", "FTHG", "FTAG")
+    work = work.dropna(subset=["date", *team_cols])
+    out = pd.DataFrame(
+        {
+            "date": work["date"].to_numpy(),
+            "home_team": work[team_cols[0]].astype(str).str.strip().to_numpy(),
+            "away_team": work[team_cols[1]].astype(str).str.strip().to_numpy(),
+            "home_goals": work[team_cols[2]].astype(int).to_numpy(),
+            "away_goals": work[team_cols[3]].astype(int).to_numpy(),
+        }
+    )
+    if season is not None:
+        out["season"] = season
+    elif "Season" in work.columns:
+        out["season"] = work["Season"].astype(str).to_numpy()
+    else:
+        out["season"] = None
+    for prefix, outcomes in _ODDS_SOURCES.items():
+        for outcome, candidates in outcomes.items():
+            col = next((c for c in candidates if c in work.columns), None)
+            values = pd.to_numeric(work[col], errors="coerce").to_numpy() if col else float("nan")
+            out[f"{prefix}_{outcome}"] = values
+    for outcome in OUTCOMES_1X2 + OUTCOMES_OU:
+        cols = [f"{b}_{outcome}" for b in SOFT_BOOKS if f"{b}_{outcome}" in out.columns]
+        out[f"max_soft_{outcome}"] = out[cols].max(axis=1, skipna=True)
+    # Kursy ≤ 1 traktujemy jako brak danych.
+    odds_cols = [c for c in out.columns if c.rsplit("_", 1)[-1] in OUTCOMES_1X2 + OUTCOMES_OU]
+    out[odds_cols] = out[odds_cols].where(out[odds_cols] > 1.0)
+    return out.sort_values("date", kind="stable").reset_index(drop=True)
+
+
+def load_history(league: League, seasons: list[int], cache_dir: Path = CACHE_DIR) -> pd.DataFrame:
+    """Rozegrane mecze z kursami do backtestu dla podanych sezonów (start_year).
+
+    Pliki zakończonych sezonów cache'ujemy na zawsze; między pobraniami pauza (ADR 0009).
+    Dodaje kolumny `league` i `match_id` (stabilne: liga, data, gospodarz, gość).
+    """
+    fd = league.football_data
+    frames = []
+    if fd.kind == "extra":
+        path = cache_dir / f"{fd.code}.csv"
+        if not path.exists():
+            _download(f"{BASE_URL}/new/{fd.code}.csv", path, None)
+        df = normalize_odds_history(_read_csv(path), "extra")
+        wanted = {_season_label(s) for s in seasons}
+        frames.append(df[df["season"].isin(wanted)])
+    else:
+        for season in seasons:
+            code = season_code(season)
+            path = cache_dir / f"{fd.code}_{code}.csv"
+            if not path.exists():
+                try:
+                    _download(f"{BASE_URL}/mmz4281/{code}/{fd.code}.csv", path, None)
+                except httpx.HTTPError as exc:
+                    log.warning("Nie udało się pobrać %s %s: %s", fd.code, code, exc)
+                    continue
+                time.sleep(DOWNLOAD_PAUSE_S)
+            frames.append(normalize_odds_history(_read_csv(path), "main", season=_season_label(season)))
+    if not frames:
+        return pd.DataFrame()
+    out = pd.concat(frames, ignore_index=True).sort_values("date", kind="stable").reset_index(drop=True)
+    out.insert(0, "league", league.key or fd.code)
+    out.insert(
+        1,
+        "match_id",
+        out["league"] + ":" + out["date"].dt.strftime("%Y%m%d") + ":" + out["home_team"] + ":" + out["away_team"],
+    )
+    return out

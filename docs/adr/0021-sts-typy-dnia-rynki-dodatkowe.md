@@ -3,6 +3,7 @@
 - **Status:** Accepted
 - **Data:** 2026-10-17
 - **Częściowo zastępuje:** [ADR 0006](0006-strategia-znajdowania-przewagi.md): porównywanie kursów i AKO bez podatku są nieaktywne.
+- **Powiązany:** [ADR 0022](0022-wyniki-f2-przewaga-tylko-bez-podatku.md): wyniki F2, czyli brak przewagi singli z podatkiem 12% na rynkach głównych; dla STS to argument za ostrożnością i trybem papierowym.
 - **Research:** [09-sts-offer-feed.md](../research/09-sts-offer-feed.md), [eksperyment kalibracji rogów i kartek](../experiments/2026-10-counts-calibration.md)
 
 ## Kontekst
