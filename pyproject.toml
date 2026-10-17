@@ -1,0 +1,47 @@
+[project]
+name = "betting-analyst"
+version = "0.1.0"
+description = "Value Scanner: osobisty asystent analizy zakładów piłkarskich pre-match (paper trading, CLV)"
+authors = [
+    { name = "Sebastian Musiał", email = "sebastian.musial@boldare.com" }
+]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "duckdb>=1.5.6",
+    "httpx>=0.28.1",
+    "penaltyblog>=1.13.1",
+    "pydantic>=2.14.1",
+    "python-dotenv>=1.2.4",
+    "pyyaml>=6.0.3",
+    "rich>=15.0.0",
+    "shin>=0.2.2",
+    "sports-betting>=0.15.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.1,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]
+
+[project.scripts]
+ba-scan = "betting_analyst.scan:main"
+ba-closing = "betting_analyst.closing:main"
+ba-report = "betting_analyst.report:main"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "FURB", "RUF"]
+# Komentarze i docstringi po polsku — znaki typu „×” czy „−” są zamierzone.
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -1,0 +1,47 @@
+# Parametry strategii (ADR 0002, 0014). Progi to hipotezy — zmiany zapisujemy w ADR.
+mode: paper                   # paper | live (live dopiero po ≥300 zakładach paper)
+bankroll_pln: 1000
+
+min_edge: 0.03                # min. EV po podatku
+min_edge_high_odds: 0.05      # próg przy kursie > high_odds_threshold
+high_odds_threshold: 3.0
+kelly_fraction: 0.25          # ¼ Kelly dla singli
+kelly_fraction_ako: 0.125     # ⅛ Kelly dla AKO
+max_stake_pct: 0.015          # maks. 1.5% bankrolla na zakład
+daily_exposure_pct: 0.05      # maks. 5% bankrolla dziennie
+stake_rounding_pln: 1         # zaokrąglenie stawek w dół do pełnych złotych
+model_disagreement_pp: 0.08   # |p_fair − p_DC| > 8 pp → flaga „do ręcznej weryfikacji”
+
+devig_method: power           # multiplicative | power | shin
+reference_bookmaker: pinnacle
+
+ako:
+  min_legs: 2
+  max_legs: 3
+  max_proposals: 3
+
+odds_api:
+  regions: [eu]               # każdy region × rynek = 1 kredyt na ligę
+  markets: [h2h, totals]
+
+dixon_coles:
+  seasons: 3
+  xi: 0.0018                  # zanik wagi w czasie (na dzień)
+
+leagues:
+  ekstraklasa:
+    name: Ekstraklasa
+    odds_api_key: soccer_poland_ekstraklasa
+    football_data: {kind: extra, code: POL}
+  championship:
+    name: Championship
+    odds_api_key: soccer_efl_champ
+    football_data: {kind: main, code: E1}
+  bundesliga2:
+    name: 2. Bundesliga
+    odds_api_key: soccer_germany_bundesliga2
+    football_data: {kind: main, code: D2}
+  eredivisie:
+    name: Eredivisie
+    odds_api_key: soccer_netherlands_eredivisie
+    football_data: {kind: main, code: N1}

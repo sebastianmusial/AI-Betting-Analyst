@@ -1,0 +1,55 @@
+# Bukmacherzy, u których właściciel ma konta (tylko licencja MF, ADR 0003).
+# Zasady podatkowe trzeba weryfikować w regulaminie bukmachera i datować (verified_at).
+# Model podatku:
+#   - stake_tax: podatek od stawki (12% w PL). Efektywny kurs = kurs × (1 − stake_tax).
+#   - single / ako: nadpisania per typ zakładu.
+#   - free_stake_limit_pln: do tej sumy stawek single w okresie podatek = 0%, powyżej stake_tax_above.
+#   - all_free_if_ako_share_gte: jeśli udział AKO w okresie ≥ progu, wszystkie zakłady bez podatku.
+
+winnings_tax:
+  # 10% od całej wygranej, jeśli wypłata z kuponu > 2280 zł (pobiera bukmacher).
+  rate: 0.10
+  threshold_pln: 2280
+
+bookmakers:
+  sts:
+    name: STS
+    stake_tax: 0.12
+    odds_api_proxies: []      # brak STS w The Odds API
+    verified_at: null
+
+  fortuna:
+    name: Fortuna
+    stake_tax: 0.12
+    odds_api_proxies: []
+    verified_at: null
+
+  betclic:
+    name: Betclic
+    stake_tax: 0.12
+    promo: "Gra bez podatku 2.0 (od 05.2026)"
+    single:
+      stake_tax: 0.0
+      free_stake_limit_pln: 1000
+      stake_tax_above: 0.06
+      period: month           # DO WERYFIKACJI w regulaminie
+    ako:
+      stake_tax: 0.0
+    all_free_if_ako_share_gte: 0.5
+    # betclic_fr to francuski rynek Betclic — tylko przybliżenie kursów PL (region "fr" kosztuje kredyty).
+    odds_api_proxies: [betclic_fr]
+    verified_at: null         # źródło: strony afiliacyjne (meczyki.pl) — zweryfikuj regulamin
+
+  superbet:
+    name: Superbet
+    stake_tax: 0.12
+    odds_api_proxies: []
+    verified_at: null
+
+# Bukmacherzy z The Odds API używani jako PROXY (nie da się u nich grać z PL!),
+# gdy brak ręcznych kursów polskich buków. Zawsze wyraźnie oznaczani w raporcie.
+# Do liczenia EV proxy traktujemy jak buka z podatkiem 12%.
+proxy_stake_tax: 0.12
+
+# Kursy referencyjne (cena fair i CLV) — NIGDY nie gramy u tych buków.
+reference_bookmakers: [pinnacle, betfair_ex_eu]

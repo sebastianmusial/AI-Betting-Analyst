@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "duckdb": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-motherduck",
+        "--db-path",
+        "data/betting.duckdb",
+        "--ephemeral-connections",
+        "--max-rows",
+        "500"
+      ]
+    },
+    "sportsbet": {
+      "command": "uvx",
+      "args": ["--from", "sports-betting[mcp]", "sportsbet-mcp"]
+    }
+  }
+}
