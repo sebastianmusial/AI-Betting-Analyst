@@ -259,13 +259,39 @@ def strategy_specs(method: str) -> list[SingleSpec | AkoSpec]:
     return specs
 
 
+def cluster_ids(bets: pd.DataFrame) -> pd.Series:
+    """Klaster = mecz (dla AKO pierwsza noga); zakłady 1X2 i O/U z jednego meczu są skorelowane."""
+    return bets["match_id"].str.split(";").str[0]
+
+
+def clustered_clv(bets: pd.DataFrame):
+    if bets.empty:
+        return clv_stats(np.array([]))
+    return clv_stats(bets.assign(cluster=cluster_ids(bets)).groupby("cluster")["clv"].mean().to_numpy())
+
+
+def week_block_bootstrap(bets: pd.DataFrame, n_boot: int = 2000, seed: int = 11) -> tuple[float, float]:
+    """95% CI średniego CLV z bootstrapu blokowego po tygodniach (korelacja w obrębie kolejki)."""
+    if len(bets) < 3:
+        return float("nan"), float("nan")
+    weeks = bets["date"].dt.to_period("W-THU")
+    groups = [g["clv"].dropna().to_numpy() for _, g in bets.groupby(weeks)]
+    groups = [g for g in groups if len(g)]
+    rng = np.random.default_rng(seed)
+    means = []
+    for _ in range(n_boot):
+        pick = rng.integers(0, len(groups), len(groups))
+        sample = np.concatenate([groups[i] for i in pick])
+        means.append(sample.mean())
+    lo, hi = np.percentile(means, [2.5, 97.5])
+    return float(lo), float(hi)
+
+
 def summarize_bets(bets: pd.DataFrame, spec: SingleSpec | AkoSpec, period: str, promo) -> dict:
     strategy = load_strategy()
     roi, lo, hi = roi_with_ci(bets["profit"].to_numpy(), np.ones(len(bets)))
     raw = clv_stats(bets["clv"].to_numpy())
-    # t-test na średnich per mecz (zakłady 1X2 i O/U z tego samego meczu są skorelowane).
-    clusters = bets["match_id"].str.split(";").str[0] if not bets.empty else bets["match_id"]
-    clustered = clv_stats(bets.assign(cluster=clusters).groupby("cluster")["clv"].mean().to_numpy())
+    clustered = clustered_clv(bets)
     is_ako = isinstance(spec, AkoSpec)
     kelly = simulate_bankroll(
         bets,
@@ -408,6 +434,7 @@ def haircut_sensitivity(sel: pd.DataFrame, method: str) -> pd.DataFrame:
             for period, seasons in (("holdout", HOLDOUT_SEASONS), ("all", None)):
                 part = bets if seasons is None else bets[bets["season"].isin(seasons)]
                 st = clv_stats(part["clv"].to_numpy())
+                st_cl = clustered_clv(part)
                 roi, lo, hi = roi_with_ci(part["profit"].to_numpy(), np.ones(len(part)))
                 rows.append(
                     {
@@ -417,12 +444,105 @@ def haircut_sensitivity(sel: pd.DataFrame, method: str) -> pd.DataFrame:
                         "n": len(part),
                         "clv_mean": st.mean,
                         "share_beat": st.share_beat,
-                        "p": st.p_one_sided,
+                        "p_clustered": st_cl.p_one_sided,
                         "roi": roi,
                         "roi_lo": lo,
                         "roi_hi": hi,
                     }
                 )
+    return pd.DataFrame(rows)
+
+
+def data_quality(sel: pd.DataFrame) -> pd.DataFrame:
+    """Diagnostyka danych per sezon: arbitraże w kolumnie Max i marża Pinnacle (otwarcie vs zamknięcie)."""
+    rows = []
+    main = sel[sel["league"].isin(MAIN_LEAGUES) & (sel["market"] == "1x2")]
+    for season, g in main.groupby("season"):
+        inv = g.assign(**{c: 1.0 / g[c] for c in ("max", "pin_open", "pin_close", "avg")})
+        per_match = inv.groupby("match_id")[["max", "pin_open", "pin_close", "avg"]].sum(min_count=3)
+        rows.append(
+            {
+                "season": season,
+                "matches": len(per_match),
+                "max_arb_share": float((per_match["max"] < 1.0).mean()),
+                "pin_open_margin_median": float((per_match["pin_open"] - 1).median()),
+                "pin_close_margin_median": float((per_match["pin_close"] - 1).median()),
+                "avg_margin_median": float((per_match["avg"] - 1).median()),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def arb_flags(sel: pd.DataFrame) -> pd.DataFrame:
+    """Flaga mecz × rynek: suma 1/Max < 1 (arbitraż między bukmacherami → Max często nieaktualny/błędny)."""
+    inv = sel.assign(inv=1.0 / sel["max"]).groupby(["match_id", "market"])["inv"].sum(min_count=2)
+    return (inv < 1.0).rename("max_arb").reset_index()
+
+
+ROBUST_LABELS = ("B_single_tax0|max|ADR", "B_single_tax0|max_soft|ADR", "C2_ako2_tax0|max|ADR")
+
+
+def robustness(sel: pd.DataFrame, all_bets: dict[str, pd.DataFrame], method: str) -> pd.DataFrame:
+    """Holdout kluczowych strategii: pełny, bez meczów z arbitrażem w Max, bez górnych 5% CLV; CI blokowe."""
+    flags = arb_flags(sel[sel["league"].isin(MAIN_LEAGUES)])
+    rows = []
+    for label in ROBUST_LABELS:
+        bets = all_bets.get(label, pd.DataFrame())
+        if bets.empty:
+            continue
+        hold = bets[bets["season"].isin(HOLDOUT_SEASONS)].copy()
+        if label.startswith("C2"):
+            # rynek nogi nie jest zapisany w kuponie — flagujemy po meczu (arbitraż w dowolnym rynku)
+            arb_matches = set(flags.loc[flags["max_arb"], "match_id"])
+            hold["max_arb"] = [any(m in arb_matches for m in ms) for ms in hold["match_id"].str.split(";")]
+        else:
+            hold = hold.merge(flags, on=["match_id", "market"], how="left")
+            hold["max_arb"] = hold["max_arb"].fillna(False).astype(bool)
+        cut = hold["clv"].quantile(0.95)
+        variants = {
+            "holdout, wszystkie": hold,
+            "holdout, bez arbitraży w Max": hold[~hold["max_arb"]],
+            "holdout, bez górnych 5% CLV": hold[hold["clv"] <= cut],
+        }
+        for name, part in variants.items():
+            st = clustered_clv(part)
+            lo, hi = week_block_bootstrap(part)
+            rows.append(
+                {
+                    "strategy": label,
+                    "variant": name,
+                    "n": len(part),
+                    "clv_mean": float(part["clv"].mean()) if len(part) else float("nan"),
+                    "ci_lo": lo,
+                    "ci_hi": hi,
+                    "p_clustered": st.p_one_sided,
+                    "share_beat": float((part["clv"] > 0).mean()) if len(part) else float("nan"),
+                    "avg_odds": float(part["odds"].mean()) if len(part) else float("nan"),
+                    "share_odds_gt5": float((part["odds"] > 5).mean()) if len(part) else float("nan"),
+                }
+            )
+    # Wrażliwość CLV na metodę devig (otwarcie i zamknięcie tą samą metodą), B / Max / ADR.
+    strategy = load_strategy()
+    main = sel[sel["league"].isin(MAIN_LEAGUES)]
+    for m in METHODS:
+        bets = single_bets(main, SingleSpec("B_single_tax0", f"p_open_{m}", "max", 0.0, None), strategy, m)
+        hold = bets[bets["season"].isin(HOLDOUT_SEASONS)]
+        st = clustered_clv(hold)
+        lo, hi = week_block_bootstrap(hold)
+        rows.append(
+            {
+                "strategy": "B_single_tax0|max|ADR",
+                "variant": f"holdout, devig = {m}",
+                "n": len(hold),
+                "clv_mean": float(hold["clv"].mean()) if len(hold) else float("nan"),
+                "ci_lo": lo,
+                "ci_hi": hi,
+                "p_clustered": st.p_one_sided,
+                "share_beat": float((hold["clv"] > 0).mean()) if len(hold) else float("nan"),
+                "avg_odds": float(hold["odds"].mean()) if len(hold) else float("nan"),
+                "share_odds_gt5": float((hold["odds"] > 5).mean()) if len(hold) else float("nan"),
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -553,6 +673,8 @@ def main(argv: list[str] | None = None) -> int:
     adr_real = adr_threshold_protocol(results, ("avg", "max_soft"))
     adr_max = adr_threshold_protocol(results, ("max",))
     haircut = haircut_sensitivity(sel, method)
+    quality = data_quality(sel)
+    robust = robustness(sel, all_bets, method)
     closing = closing_snapshot_ev(sel, method)
     baseline = baseline_clv(sel, method)
 
@@ -560,6 +682,8 @@ def main(argv: list[str] | None = None) -> int:
     results.to_csv(OUT_DIR / "strategy_results.csv", index=False)
     pd.concat(all_bets.values(), ignore_index=True).to_parquet(OUT_DIR / "bets.parquet", index=False)
     haircut.to_csv(OUT_DIR / "haircut.csv", index=False)
+    robust.to_csv(OUT_DIR / "robustness.csv", index=False)
+    quality.to_csv(OUT_DIR / "data_quality.csv", index=False)
     protocol_real.to_csv(OUT_DIR / "protocol_realistic.csv", index=False)
     protocol_max.to_csv(OUT_DIR / "protocol_max.csv", index=False)
 
@@ -631,6 +755,14 @@ def main(argv: list[str] | None = None) -> int:
             "Wrażliwość: kurs = Max × (1 − haircut), single, próg ADR",
             to_markdown(haircut, [*pct_cols, "haircut", "tax"]),
         ),
+        (
+            "Jakość danych per sezon (arbitraże w Max, marże)",
+            to_markdown(
+                quality,
+                [*pct_cols, "max_arb_share", "pin_open_margin_median", "pin_close_margin_median", "avg_margin_median"],
+            ),
+        ),
+        ("Odporność wyniku (holdout)", to_markdown(robust, [*pct_cols, "ci_lo", "ci_hi", "share_odds_gt5"])),
         ("Strategie przy progu ADR 0014 (3% / 5% dla kursu > 3,0)", to_markdown(adr_rows, pct_cols)),
         ("Pełna siatka progów — holdout", to_markdown(results[results["period"] == "holdout"][cols_main], pct_cols)),
         ("Pełna siatka progów — dev", to_markdown(results[results["period"] == "dev"][cols_main], pct_cols)),

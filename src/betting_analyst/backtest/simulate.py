@@ -59,27 +59,30 @@ def simulate_bankroll(
     for date, day in bets.sort_values("date", kind="stable").groupby("date", sort=True):
         day = day.sort_values("ev", ascending=False, kind="stable")
         month = pd.Timestamp(date).to_period("M")
-        planned: list[tuple[float, float, int]] = []  # (stawka, kurs efektywny, wygrana)
+        planned: list[tuple[float, float, int, bool]] = []  # (stawka, kurs efektywny, wygrana, opodatkowany)
         for r in day.itertuples(index=False):
             odds_eff = float(r.odds_eff)
             stake = kelly_stake(float(r.p), odds_eff, bankroll, kelly_fraction, max_stake_pct, rounding)
+            taxed = False
             if promo_bookmaker is not None and stake > 0:
-                used = month_stakes.get(month, 0.0) + sum(s for s, _, _ in planned)
+                used = month_stakes.get(month, 0.0) + sum(p[0] for p in planned)
                 tax = stake_tax_rate(promo_bookmaker, "single", TaxContext(period_single_stakes_pln=used), stake)
                 if tax > 0:
                     odds_eff = effective_odds(float(r.odds), tax)
                     if expected_value(float(r.p), odds_eff) < float(r.threshold):
                         continue
                     stake = kelly_stake(float(r.p), odds_eff, bankroll, kelly_fraction, max_stake_pct, rounding)
-                    taxed_total += stake
-            planned.append((stake, odds_eff, int(r.won)))
-        stakes = apply_daily_exposure([s for s, _, _ in planned], bankroll, daily_exposure_pct, rounding=rounding)
+                    taxed = True
+            planned.append((stake, odds_eff, int(r.won), taxed))
+        stakes = apply_daily_exposure([p[0] for p in planned], bankroll, daily_exposure_pct, rounding=rounding)
         day_profit = 0.0
-        for stake, (_, odds_eff, won) in zip(stakes, planned, strict=True):
+        for stake, (_, odds_eff, won, taxed) in zip(stakes, planned, strict=True):
             if stake <= 0:
                 continue
             n_placed += 1
             staked_total += stake
+            if taxed:
+                taxed_total += stake
             day_profit += stake * (odds_eff - 1.0) if won else -stake
         month_stakes[month] = month_stakes.get(month, 0.0) + sum(stakes)
         bankroll += day_profit
