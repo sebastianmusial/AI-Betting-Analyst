@@ -6,6 +6,7 @@ Uruchamiaj kilka–kilkanaście minut przed startem meczów z otwartymi zakłada
 (np. co 15 min z launchd). Kredyty zużywa tylko wtedy, gdy w oknie są mecze z zakładami:
 2 kredyty (h2h + totals) na ligę. Po rozpoczęciu meczu The Odds API zwraca kursy live,
 więc snapshot robimy wyłącznie dla meczów, które jeszcze się nie zaczęły.
+Limit dzienny i rezerwa kredytów: config/strategy.yaml → odds_api, log zużycia: data/logs/ (budget.py, ADR 0023).
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from betting_analyst import ledger
+from betting_analyst import budget, ledger
 from betting_analyst.config import DB_PATH, get_env, load_bookmakers, load_strategy
 from betting_analyst.domain import SELECTIONS, selections_for
 from betting_analyst.models.devig import devig
@@ -37,7 +38,33 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--minutes-before", type=int, default=20, help="okno: mecze startujące w ciągu N minut")
     parser.add_argument("--all-open", action="store_true", help="wszystkie przyszłe mecze z otwartymi zakładami")
     parser.add_argument("--db", type=Path, default=DB_PATH, help=argparse.SUPPRESS)
+    parser.add_argument("--usage-log", type=Path, default=budget.USAGE_LOG, help=argparse.SUPPRESS)
     return parser.parse_args(argv)
+
+
+def _leagues_within_budget(pending, strategy, usage_log: Path, console: Console) -> list[str]:
+    """Ligi do odpytania w limicie kredytów (budget.py); priorytet: najwcześniejszy start meczu."""
+    first_kickoff = pending.groupby("league")["commence_time"].min().sort_values()
+    leagues = list(first_kickoff.index)
+    cost = len(strategy.odds_api.regions) * len(strategy.odds_api.markets)
+    today = datetime.now(budget.LOCAL_TZ).date()
+    spent = budget.spent_on(today, "closing", usage_log)
+    plan = budget.plan_closing(
+        leagues,
+        cost,
+        spent,
+        strategy.odds_api.daily_closing_credits,
+        budget.last_remaining(usage_log),
+        strategy.odds_api.reserve_credits,
+    )
+    for league_key in plan.skipped:
+        console.print(f"[yellow]Budżet kredytów: pomijam zamknięcie {league_key} — {plan.reason}[/]")
+        budget.log_usage(usage_log, "closing", strategy.leagues[league_key].odds_api_key, 0, None, "skipped:budget")
+    console.print(
+        f"[dim]Budżet zamknięć dziś: zużyto {spent}/{strategy.odds_api.daily_closing_credits} kredytów, "
+        f"plan: {len(plan.allowed)} lig × {cost}[/]"
+    )
+    return plan.allowed
 
 
 def close_sts_model_bets(con, now: datetime, until: datetime, console: Console) -> int:
@@ -100,14 +127,15 @@ def main(argv: list[str] | None = None) -> int:
         console.print(Panel(MISSING_KEY_HELP, title="Brak klucza The Odds API", style="yellow"))
         return 2
 
-    client = TheOddsApiClient()
+    client = TheOddsApiClient(usage_log=args.usage_log, job="closing")
     wanted_events = set(pending["event_id"])
+    leagues = _leagues_within_budget(pending, strategy, args.usage_log, console)
     table = Table(title="Zamknięcie (fair Pinnacle) i CLV", header_style="bold")
     for col in ("Mecz", "Rynek", "Źródło fair", "Zaktualizowane zakłady"):
         table.add_column(col)
 
     total = 0
-    for league_key in sorted(set(pending["league"])):
+    for league_key in leagues:
         league = strategy.leagues[league_key]
         result = client.fetch_odds(league.odds_api_key, strategy.odds_api.regions, strategy.odds_api.markets)
         quotes = [q for q in parse_events(result.events, league_key, result.fetched_at) if q.event_id in wanted_events]

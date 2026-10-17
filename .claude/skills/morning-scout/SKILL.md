@@ -1,7 +1,7 @@
 ---
 name: morning-scout
 description: Poranne „Typy dnia” z oferty STS — skan dzisiejszych i jutrzejszych meczów (1X2, gole, BTTS, rogi, kartki), sprawdzenie newsów dla top typów, ewentualne weto z cytatem i krótka lista „na co postawić i za ile”. Użyj, gdy właściciel pyta o typy na dziś, poranny skan, co obstawić w STS albo uruchamia /morning-scout.
-argument-hint: "[--days N] (domyślnie 2: dziś + jutro)"
+argument-hint: "[--days N] [--notify] (domyślnie 2: dziś + jutro; --notify = skrót na Telegram na końcu)"
 allowed-tools: Bash(uv run python -m betting_analyst.*), Read, Write, WebSearch, WebFetch
 ---
 
@@ -32,7 +32,8 @@ uv run python -m betting_analyst.morning --log-paper
 ```
 
 - Brak `ODDS_API_KEY` → skan działa tylko na modelach (bez Pinnacle) — poinformuj o tym.
-- Ponowny skan tego samego dnia bez zużywania kredytów: `--from-cache`.
+- Ponowny skan tego samego dnia bez zużywania kredytów: `--from-cache`. Jeśli
+  `data/scans/<DATA>-morning.json` już istnieje (np. skan z launchd o 08:00), użyj `--from-cache`.
 - Ostrzeżenia o drużynach bez dopasowania: przekaż właścicielowi propozycję aliasu do
   `config/team_aliases.yaml` (nie dopisuj sam bez potwierdzenia — ADR 0010).
 
@@ -64,3 +65,14 @@ Lista typów w kolejności z raportu:
 `Mecz (start) — Typ @kurs STS — stawka — ✅/typ dnia — 1 zdanie: dlaczego (źródło ceny + najważniejszy news)`.
 Dodaj: które typy zawetowałeś i dlaczego, oraz przypomnienie o limicie dziennym i trybie paper.
 Pełny raport: `reports/<DATA>-morning.md`.
+
+### 5. Telegram (tylko z argumentem `--notify`)
+
+Gdy skill uruchomiono z `--notify` (np. z harmonogramu, docs/automation.md), po wetach wyślij skrót:
+
+```bash
+uv run python -m betting_analyst.notify morning
+```
+
+Treść składa kod z JSON-a i ledgera (weta jako „⛔ weto”). Nie piszesz własnej wiadomości na Telegram.
+Bez `--notify` niczego nie wysyłasz.

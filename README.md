@@ -38,6 +38,12 @@ uv run python -m betting_analyst.morning --log-paper     # dziś + jutro, top 5 
 ```
 W Claude Code: **`/morning-scout`** (skan, newsy dla typów, ewentualne weto z cytatem, lista „na co i za ile”).
 
+**Automatycznie (launchd + Telegram):** 08:00 skan i skrót typów na Telegram, co 15 minut w godz. 11–23 zamknięcie i CLV (z dziennym limitem kredytów The Odds API), 23:30 raport CLV i krótkie CLV na Telegram. Instalacja i założenie bota: [docs/automation.md](docs/automation.md).
+```bash
+uv run python -m betting_analyst.notify test     # test bota (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID w .env)
+scripts/run_job.sh closing                        # ręczny przebieg zadania, log w data/logs/
+```
+
 Jak czytać raport (`reports/RRRR-MM-DD-morning.md`):
 - **Edge:** o ile kurs STS jest lepszy od „prawdziwej” wyceny (Pinnacle bez marży albo model).
 - **✅:** typ jest na plus także po 12% podatku. Typ bez ✅ to „typ dnia” z małą stałą stawką; po podatku w oczekiwaniu jest na minusie.

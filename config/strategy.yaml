@@ -23,6 +23,10 @@ ako:
 odds_api:
   regions: [eu]               # każdy region × rynek = 1 kredyt na ligę
   markets: [h2h, totals]
+  # Budżet kredytów (darmowy plan 500/mies.): skan ≈ 8/dzień, zamknięcie 2 na ligę z zakładami w oknie.
+  # 30 dni × (8 + 10) = 540 — limit dzienny to sufit, typowo zamknięć jest mniej. Log: data/logs/odds_api_usage.jsonl
+  daily_closing_credits: 10   # maks. kredytów na zamknięcia dziennie (python -m betting_analyst.closing)
+  reserve_credits: 40         # poniżej tylu pozostałych kredytów zamknięcia są pomijane (zostaje na poranne skany)
 
 dixon_coles:
   seasons: 3

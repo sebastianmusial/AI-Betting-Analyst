@@ -18,6 +18,7 @@ RAW_DIR = DATA_DIR / "raw"
 SCANS_DIR = DATA_DIR / "scans"
 MANUAL_ODDS_DIR = DATA_DIR / "manual_odds"
 REPORTS_DIR = PROJECT_ROOT / "reports"
+LOGS_DIR = DATA_DIR / "logs"
 DB_PATH = DATA_DIR / "betting.duckdb"
 
 DevigMethod = Literal["multiplicative", "power", "shin"]
@@ -81,6 +82,8 @@ class AkoConfig(BaseModel):
 class OddsApiConfig(BaseModel):
     regions: list[str] = Field(default_factory=lambda: ["eu"])
     markets: list[str] = Field(default_factory=lambda: ["h2h", "totals"])
+    daily_closing_credits: int = 10  # limit kredytów na snapshoty zamknięcia dziennie (budget.py)
+    reserve_credits: int = 40  # poniżej tylu pozostałych kredytów nie robimy zamknięć (zostaje na skany)
 
 
 class DixonColesConfig(BaseModel):

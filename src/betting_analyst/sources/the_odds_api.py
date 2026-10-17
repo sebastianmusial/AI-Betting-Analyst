@@ -18,6 +18,7 @@ from pathlib import Path
 
 import httpx
 
+from betting_analyst.budget import log_usage
 from betting_analyst.config import RAW_DIR, get_env
 from betting_analyst.domain import Quote
 
@@ -85,9 +86,13 @@ class TheOddsApiClient:
         cache_dir: Path = CACHE_DIR,
         timeout: float = 20.0,
         transport: httpx.BaseTransport | None = None,
+        usage_log: Path | None = None,
+        job: str = "adhoc",
     ) -> None:
         self.api_key = api_key or get_env("ODDS_API_KEY")
         self.cache_dir = cache_dir
+        self.usage_log = usage_log  # data/logs/odds_api_usage.jsonl (budget.py); None = bez logu
+        self.job = job
         self._client = httpx.Client(base_url=BASE_URL, timeout=timeout, transport=transport)
 
     def fetch_odds(self, sport_key: str, regions: list[str], markets: list[str]) -> FetchResult:
@@ -110,6 +115,8 @@ class TheOddsApiClient:
             credits.used,
             credits.remaining,
         )
+        if self.usage_log is not None:
+            log_usage(self.usage_log, self.job, sport_key, credits.last, credits.remaining, response.status_code)
         if response.status_code == 401:
             raise RuntimeError(f"The Odds API odrzuciło klucz (401): {response.text[:200]}")
         if response.status_code == 422:
