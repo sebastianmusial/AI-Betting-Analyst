@@ -94,7 +94,7 @@ def _matches_with_odds() -> pd.DataFrame:
             "away_goals": rng.integers(0, 4, n),
         }
     )
-    for prefix in ("pin_open", "pin_close", "avg", "max", "max_soft"):
+    for prefix in ("pin_open", "pin_close", "avg", "max", "max_soft", "avg_close", "max_close"):
         bump = {"max": 1.12, "max_soft": 1.06, "avg": 0.97}.get(prefix, 1.0)
         base[f"{prefix}_home"] = rng.uniform(1.6, 3.2, n) * bump
         base[f"{prefix}_draw"] = rng.uniform(3.0, 3.8, n) * bump
@@ -112,8 +112,8 @@ def test_strategy_selection_ignores_closing_odds(strategy):
     spec = SingleSpec("B", "p_open_power", "max", 0.0, 0.0)
     bets = single_bets(sel, spec, strategy, "power")
     garbage = matches.copy()
-    for o in ("home", "draw", "away", "over", "under"):
-        garbage[f"pin_close_{o}"] = garbage[f"pin_close_{o}"].sample(frac=1.0, random_state=5).to_numpy()
+    for col in [c for c in garbage.columns if "close" in c]:  # pin_close, avg_close, max_close
+        garbage[col] = garbage[col].sample(frac=1.0, random_state=5).to_numpy()
     sel_g = build_selections(garbage)
     sel_g["p_dc"] = np.nan
     bets_g = single_bets(sel_g, spec, strategy, "power")
