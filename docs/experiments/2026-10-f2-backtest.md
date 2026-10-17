@@ -3,7 +3,7 @@
 - **Data:** 2026-10-17
 - **Kod:** `src/betting_analyst/backtest/`, uruchomienie `uv run ba-backtest [--refresh]`
 - **Pełne tabele (generowane):** [2026-10-f2-backtest-tables.md](2026-10-f2-backtest-tables.md)
-- **Decyzja:** [ADR 0021](../adr/0021-wyniki-f2-przewaga-tylko-bez-podatku.md)
+- **Decyzja:** [ADR 0022](../adr/0022-wyniki-f2-przewaga-tylko-bez-podatku.md)
 
 ## Werdykt w skrócie
 

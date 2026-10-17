@@ -1,4 +1,4 @@
-# ADR 0021: Wyniki F2: przewaga tylko bez podatku i przy kursach z górnej granicy rynku
+# ADR 0022: Wyniki F2: przewaga tylko bez podatku i przy kursach z górnej granicy rynku
 
 - **Status:** Accepted
 - **Data:** 2026-10-17

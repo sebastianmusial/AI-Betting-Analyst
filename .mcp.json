@@ -13,7 +13,19 @@
     },
     "sportsbet": {
       "command": "uvx",
-      "args": ["--from", "sports-betting[mcp]", "sportsbet-mcp"]
+      "args": [
+        "--from",
+        "sports-betting[mcp]",
+        "sportsbet-mcp"
+      ]
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--isolated"
+      ]
     }
   }
 }

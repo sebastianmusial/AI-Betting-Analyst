@@ -32,6 +32,18 @@ Osobisty asystent analizy zakładów piłkarskich (pre-match) dla legalnych pols
 ## Stack
 Python 3.12, uv, DuckDB, penaltyblog, sports-betting, soccerdata, pytest, ruff. Interfejs: Claude Code (skille + MCP), Telegram.
 
+## Typy dnia (STS): poranny skan
+```bash
+uv run python -m betting_analyst.morning --log-paper     # dziś + jutro, top 5 typów, zapis na papierze
+```
+W Claude Code: **`/morning-scout`** (skan, newsy dla typów, ewentualne weto z cytatem, lista „na co i za ile”).
+
+Jak czytać raport (`reports/RRRR-MM-DD-morning.md`):
+- **Edge:** o ile kurs STS jest lepszy od „prawdziwej” wyceny (Pinnacle bez marży albo model).
+- **✅:** typ jest na plus także po 12% podatku. Typ bez ✅ to „typ dnia” z małą stałą stawką; po podatku w oczekiwaniu jest na minusie.
+- **MODEL_ONLY:** wycena tylko z naszego modelu (rogi, kartki, inne linie goli), więc mniej pewna.
+- **CLV:** czy wziąłeś kurs lepszy niż „prawdziwa” wycena tuż przed meczem. Przykład: kurs 2.10, zamknięcie Pinnacle bez marży 1.95, więc CLV = +7,7%. Pojedynczy mecz to loteria; średnie CLV po 200–300 zakładach pokazuje, czy masz przewagę.
+
 ## Szybki start
 ```bash
 uv sync                                   # środowisko (Python 3.12)

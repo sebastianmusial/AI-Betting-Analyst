@@ -65,6 +65,9 @@ CREATE TABLE IF NOT EXISTS paper_bets (
     stake               DOUBLE NOT NULL,
     flags               VARCHAR,
     is_shadow           BOOLEAN NOT NULL DEFAULT FALSE,  -- shadow: tylko pomiar CLV, poza strategią
+    fair_source         VARCHAR,   -- pinnacle | consensus(n) | model:dc | model:counts (ADR 0021)
+    pick_type           VARCHAR,   -- value (✅ na plus po podatku) | daily (typ dnia) | NULL (scan)
+    ref_event_id        VARCHAR,   -- id meczu w The Odds API (zamknięcie Pinnacle dla zakładów STS)
     closing_captured_at TIMESTAMPTZ,
     closing_fair_prob   DOUBLE,
     closing_fair_odds   DOUBLE,
@@ -103,6 +106,8 @@ def connect(db_path: Path | str = DB_PATH) -> duckdb.DuckDBPyConnection:
     con.execute(SCHEMA)
     # Migracja baz sprzed kolumny is_shadow.
     con.execute("ALTER TABLE paper_bets ADD COLUMN IF NOT EXISTS is_shadow BOOLEAN DEFAULT FALSE")
+    for col in ("fair_source", "pick_type", "ref_event_id"):
+        con.execute(f"ALTER TABLE paper_bets ADD COLUMN IF NOT EXISTS {col} VARCHAR")
     return con
 
 
@@ -178,6 +183,9 @@ class PaperBet:
     bet_type: str = "single"
     ako_id: str | None = None
     is_shadow: bool = False
+    fair_source: str | None = None
+    pick_type: str | None = None
+    ref_event_id: str | None = None
     bet_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     placed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
@@ -260,8 +268,19 @@ def period_single_stakes(con: duckdb.DuckDBPyConnection, bookmaker: str, day: da
 def open_bets_for_closing(con: duckdb.DuckDBPyConnection, now: datetime, until: datetime) -> pd.DataFrame:
     """Mecze z otwartymi (i zawetowanymi — CLV wet też mierzymy, ADR 0012) zakładami w (now, until]."""
     return con.execute(
+        "SELECT DISTINCT COALESCE(ref_event_id, event_id) AS event_id, league, commence_time, home_team, away_team "
+        "FROM paper_bets WHERE status IN ('open', 'vetoed') AND commence_time > ? AND commence_time <= ? "
+        "AND (fair_source IS NULL OR fair_source NOT LIKE 'model:%')",
+        [now, until],
+    ).df()
+
+
+def open_sts_model_bets(con: duckdb.DuckDBPyConnection, now: datetime, until: datetime) -> pd.DataFrame:
+    """Mecze STS z otwartymi zakładami wycenianymi modelem (CLV względem zamknięcia STS, ADR 0021)."""
+    return con.execute(
         "SELECT DISTINCT event_id, league, commence_time, home_team, away_team FROM paper_bets "
-        "WHERE status IN ('open', 'vetoed') AND commence_time > ? AND commence_time <= ?",
+        "WHERE status IN ('open', 'vetoed') AND commence_time > ? AND commence_time <= ? "
+        "AND event_id LIKE 'sts:%' AND fair_source LIKE 'model:%'",
         [now, until],
     ).df()
 
@@ -272,13 +291,21 @@ def record_closing(
     market: str,
     fair_probs: dict[str, float],
     captured_at: datetime,
+    model_only: bool = False,
 ) -> int:
-    """Zapisuje fair zamknięcia i CLV dla zakładów na dany rynek. Późniejszy snapshot nadpisuje wcześniejszy."""
+    """Zapisuje fair zamknięcia i CLV dla zakładów na dany rynek. Późniejszy snapshot nadpisuje wcześniejszy.
+
+    event_id pasuje do event_id albo ref_event_id zakładu. model_only=True (zamknięcie STS) aktualizuje
+    wyłącznie zakłady wyceniane modelem; w przeciwnym razie tylko pozostałe (rynek/Pinnacle).
+    """
+    source_filter = (
+        "fair_source LIKE 'model:%'" if model_only else "(fair_source IS NULL OR fair_source NOT LIKE 'model:%')"
+    )
     updated = 0
     for selection, prob in fair_probs.items():
         fair_odds = 1.0 / prob
         result = con.execute(
-            """
+            f"""
             UPDATE paper_bets SET
                 closing_captured_at = ?,
                 closing_fair_prob = ?,
@@ -286,11 +313,24 @@ def record_closing(
                 clv_log = ln(odds / ?),
                 clv_pct = odds / ? - 1,
                 clv_eff_pct = odds_eff / ? - 1
-            WHERE event_id = ? AND market = ? AND selection = ?
+            WHERE (event_id = ? OR ref_event_id = ?) AND market = ? AND selection = ?
               AND (closing_captured_at IS NULL OR closing_captured_at <= ?)
+              AND {source_filter}
             RETURNING bet_id
             """,
-            [captured_at, prob, fair_odds, fair_odds, fair_odds, fair_odds, event_id, market, selection, captured_at],
+            [
+                captured_at,
+                prob,
+                fair_odds,
+                fair_odds,
+                fair_odds,
+                fair_odds,
+                event_id,
+                event_id,
+                market,
+                selection,
+                captured_at,
+            ],
         ).fetchall()
         updated += len(result)
     return updated
@@ -303,7 +343,19 @@ def clv_report(
 
     shadow=False (domyślnie): tylko zakłady strategii; True: tylko shadow; None: wszystkie.
     """
-    allowed = {None, "league", "market", "bookmaker", "is_proxy", "bet_type", "source", "status", "is_shadow"}
+    allowed = {
+        None,
+        "league",
+        "market",
+        "bookmaker",
+        "is_proxy",
+        "bet_type",
+        "source",
+        "status",
+        "is_shadow",
+        "fair_source",
+        "pick_type",
+    }
     if group_by not in allowed:
         raise ValueError(f"group_by musi być jednym z {allowed}")
     key = f"{group_by}," if group_by else ""
@@ -361,8 +413,8 @@ def main(argv: list[str] | None = None) -> int:
     v = sub.add_parser("veto", help="zawetuj kandydata (zakład zostaje w rejestrze ze statusem vetoed)")
     v.add_argument("--date", type=date.fromisoformat, required=True)
     v.add_argument("--event-id", required=True)
-    v.add_argument("--market", required=True, choices=["1x2", "ou25"])
-    v.add_argument("--selection", required=True, choices=["home", "draw", "away", "over", "under"])
+    v.add_argument("--market", required=True, help="np. 1x2, ou25, goals_ou_3.5, btts, corners_ou_9.5, cards_ou_4.5")
+    v.add_argument("--selection", required=True, help="home|draw|away|over|under|yes|no")
     v.add_argument("--reason", required=True, help="cytat ze źródła + krótkie uzasadnienie")
     v.add_argument("--url", required=True, help="URL źródła")
     v.add_argument("--db", type=Path, default=DB_PATH, help=argparse.SUPPRESS)

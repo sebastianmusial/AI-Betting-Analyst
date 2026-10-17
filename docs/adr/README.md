@@ -10,7 +10,7 @@ Format: uproszczony MADR, opisany w [ADR 0000](0000-rejestrowanie-decyzji-adr.md
 | [0003](0003-kontekst-prawny-podatkowy-pl.md) | Kontekst prawny i podatkowy PL | Accepted |
 | [0004](0004-wybor-sportu-i-lig.md) | Wybór sportu i lig: piłka, Ekstraklasa i ligi średniego szczebla | Accepted |
 | [0005](0005-pre-match-vs-live.md) | Pre-match vs live: pre-match, live tylko jako alerty | Accepted |
-| [0006](0006-strategia-znajdowania-przewagi.md) | Strategia znajdowania przewagi (hybryda) | Accepted |
+| [0006](0006-strategia-znajdowania-przewagi.md) | Strategia znajdowania przewagi (hybryda) | Accepted, częściowo zastąpiony przez 0021 |
 | [0007](0007-stack-technologiczny.md) | Stack technologiczny: Python, uv | Accepted |
 | [0008](0008-przechowywanie-danych.md) | Przechowywanie danych: DuckDB i warstwa raw | Accepted |
 | [0009](0009-zrodla-danych-ingestion.md) | Źródła danych i ingestion: najpierw darmowe | Accepted |
@@ -25,7 +25,8 @@ Format: uproszczony MADR, opisany w [ADR 0000](0000-rejestrowanie-decyzji-adr.md
 | [0018](0018-ruch-kursow-steam.md) | Ruch kursów (steam) | Proposed |
 | [0019](0019-wykorzystanie-open-source.md) | Wykorzystanie open source | Accepted |
 | [0020](0020-narzedzia-claude-code.md) | Narzędzia Claude Code | Accepted |
-| [0021](0021-wyniki-f2-przewaga-tylko-bez-podatku.md) | Wyniki F2: przewaga tylko bez podatku i przy kursach z górnej granicy rynku | Accepted |
+| [0021](0021-sts-typy-dnia-rynki-dodatkowe.md) | STS jako główny bukmacher, „Typy dnia”, rogi i kartki (model-only) | Accepted |
+| [0022](0022-wyniki-f2-przewaga-tylko-bez-podatku.md) | Wyniki F2: przewaga tylko bez podatku i przy kursach z górnej granicy rynku | Accepted |
 
 ## Szablon
 

@@ -58,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     console.rule("Raport CLV — paper trading (strategia)")
     if n_strategy:
         console.print(df_table(overall, "Łącznie", PCT_COLS))
-        for key in ("league", "market", "bookmaker", "is_proxy", "status"):
+        for key in ("pick_type", "fair_source", "league", "market", "bookmaker", "is_proxy", "status"):
             console.print(df_table(ledger.clv_report(con, key), f"Wg {key}", PCT_COLS))
     else:
         console.print("Brak zakładów strategii (żaden kandydat nie przeszedł progu EV po podatku).")
@@ -71,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
         """
         SELECT CAST(scan_date AS VARCHAR) AS scan_date, league, home_team || ' – ' || away_team AS match,
                market, selection, bookmaker, is_proxy, odds, odds_eff, ev,
-               closing_fair_odds, clv_pct, clv_eff_pct, stake, bet_type, is_shadow
+               closing_fair_odds, clv_pct, clv_eff_pct, stake, bet_type, is_shadow, pick_type, fair_source
         FROM paper_bets ORDER BY placed_at DESC LIMIT ?
         """,
         [args.last],
