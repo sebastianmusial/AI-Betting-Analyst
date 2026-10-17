@@ -534,11 +534,11 @@ def robustness(sel: pd.DataFrame, all_bets: dict[str, pd.DataFrame], method: str
                 "strategy": "B_single_tax0|max|ADR",
                 "variant": f"holdout, devig = {m}",
                 "n": len(hold),
-                "clv_mean": st.mean if len(hold) else float("nan"),
+                "clv_mean": float(hold["clv"].mean()) if len(hold) else float("nan"),
                 "ci_lo": lo,
                 "ci_hi": hi,
                 "p_clustered": st.p_one_sided,
-                "share_beat": st.share_beat,
+                "share_beat": float((hold["clv"] > 0).mean()) if len(hold) else float("nan"),
                 "avg_odds": float(hold["odds"].mean()) if len(hold) else float("nan"),
                 "share_odds_gt5": float((hold["odds"] > 5).mean()) if len(hold) else float("nan"),
             }
