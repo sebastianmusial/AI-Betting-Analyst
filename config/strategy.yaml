@@ -28,20 +28,35 @@ dixon_coles:
   seasons: 3
   xi: 0.0018                  # zanik wagi w czasie (na dzień)
 
+# Tryb „Typy dnia” (ADR 0021) — poranny skan oferty STS (python -m betting_analyst.morning)
+default_bookmaker: sts
+daily_picks: 5                # top N typów dziennie (maks. 1 na mecz)
+pick_flat_stake_pct: 0.005    # stawka typu bez przewagi po podatku (0.5% bankrolla)
+model_only_min_edge: 0.08     # rogi/kartki itp. wyceniane tylko modelem: edge ≥ 8% przed podatkiem
+model_weight: 0.5             # model-only: p_fair = 0.5·model + 0.5·zdewigowany STS (model tylko „przechyla” rynek)
+count_totals_enabled: false   # sumy rogów/kartek wyłączone: model ≈ średnia ligi; zostają linie per drużyna (docs/experiments/2026-10-counts-calibration.md)
+model_only_max_odds: 3.5      # model-only: kursy > 3.5 pomijamy (kalibracja: model przeszacowuje ogony kartek)
+max_model_market_gap: 0.15    # |model − STS| > 15 pp → typ odrzucony (zwykle błąd modelu, np. beniaminek)
+morning_days: 2               # horyzont: dziś + jutro
+
 leagues:
   ekstraklasa:
     name: Ekstraklasa
     odds_api_key: soccer_poland_ekstraklasa
+    sts_tournament_id: 201
     football_data: {kind: extra, code: POL}
   championship:
     name: Championship
     odds_api_key: soccer_efl_champ
+    sts_tournament_id: 18
     football_data: {kind: main, code: E1}
   bundesliga2:
     name: 2. Bundesliga
     odds_api_key: soccer_germany_bundesliga2
+    sts_tournament_id: 44
     football_data: {kind: main, code: D2}
   eredivisie:
     name: Eredivisie
     odds_api_key: soccer_netherlands_eredivisie
+    sts_tournament_id: 37
     football_data: {kind: main, code: N1}

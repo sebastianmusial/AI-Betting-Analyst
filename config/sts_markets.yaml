@@ -1,0 +1,19 @@
+# Mapowanie rynków STS (id typu rynku z feedu wss://www.sts.pl/sbk/api/sbk) na klucze wewnętrzne.
+# Rozpoznanie protokołu: docs/research/09-sts-offer-feed.md.
+#   market: klucz wewnętrzny; "{line}" zastępujemy linią z pola D (D/100, np. 1050 → 10.5)
+#   outcomes: id wyniku STS → selekcja
+# Rynki spoza tej listy (Bet Builder, łączone, zawodnicy, połowy) są ignorowane (ADR 0021).
+
+markets:
+  "1":    {market: "1x2", outcomes: {"1": home, "2": draw, "3": away}}
+  "25":   {market: "goals_ou_{line}", outcomes: {"12": over, "13": under}}
+  "43":   {market: "btts", outcomes: {"26": "yes", "27": "no"}}
+  "228":  {market: "corners_ou_{line}", outcomes: {"12": over, "13": under}}
+  "231":  {market: "home_corners_ou_{line}", outcomes: {"12": over, "13": under}}
+  "234":  {market: "away_corners_ou_{line}", outcomes: {"12": over, "13": under}}
+  "185":  {market: "cards_ou_{line}", outcomes: {"12": over, "13": under}}
+  "188":  {market: "home_cards_ou_{line}", outcomes: {"12": over, "13": under}}
+  "191":  {market: "away_cards_ou_{line}", outcomes: {"12": over, "13": under}}
+  # Zapisujemy (historia kursów), ale w v1 nie oceniamy — brak modelu:
+  "2111": {market: "fouls_ou_{line}", outcomes: {"12": over, "13": under}}
+  "1562": {market: "sot_ou_{line}", outcomes: {"12": over, "13": under}}

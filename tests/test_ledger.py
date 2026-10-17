@@ -128,3 +128,24 @@ def test_connect_migrates_old_db_without_shadow_column(tmp_path):
     cols = {r[0] for r in con.execute("DESCRIBE paper_bets").fetchall()}
     assert "is_shadow" in cols
     con.close()
+
+
+def test_record_closing_routes_by_fair_source(con):
+    now = datetime.now(UTC)
+    # typ STS z ceną Pinnacle: zamknięcie przez ref_event_id z The Odds API
+    ledger.log_paper_bet(con, _bet(event_id="sts:f1", ref_event_id="oddsapi1", fair_source="pinnacle", odds=2.1))
+    # typ STS wyceniony modelem: zamknięcie tylko z feedu STS
+    ledger.log_paper_bet(
+        con, _bet(event_id="sts:f1", market="corners_ou_9.5", selection="over", fair_source="model:counts", odds=2.0)
+    )
+    pending = ledger.open_bets_for_closing(con, now, now.replace(year=2027))
+    assert list(pending["event_id"]) == ["oddsapi1"]
+    assert list(ledger.open_sts_model_bets(con, now, now.replace(year=2027))["event_id"]) == ["sts:f1"]
+
+    assert ledger.record_closing(con, "oddsapi1", "1x2", {"home": 0.5}, now) == 1
+    # zamknięcie STS nie nadpisuje typów rynkowych i odwrotnie
+    assert ledger.record_closing(con, "sts:f1", "1x2", {"home": 0.6}, now, model_only=True) == 0
+    assert ledger.record_closing(con, "sts:f1", "corners_ou_9.5", {"over": 0.5}, now) == 0
+    assert ledger.record_closing(con, "sts:f1", "corners_ou_9.5", {"over": 0.5}, now, model_only=True) == 1
+    by_src = ledger.clv_report(con, "fair_source")
+    assert set(by_src["fair_source"]) == {"pinnacle", "model:counts"}

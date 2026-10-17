@@ -29,6 +29,22 @@ CURRENT_SEASON_MAX_AGE_S = 12 * 3600
 
 RESULT_COLUMNS = ["date", "home_team", "away_team", "home_goals", "away_goals"]
 
+# Statystyki meczowe (tylko ligi "main"; POL.csv ich nie ma). Referee jest wyłącznie w E1.
+STAT_COLUMNS = {
+    "HC": "home_corners",
+    "AC": "away_corners",
+    "HY": "home_yellow",
+    "AY": "away_yellow",
+    "HR": "home_red",
+    "AR": "away_red",
+    "HF": "home_fouls",
+    "AF": "away_fouls",
+    "HS": "home_shots",
+    "AS": "away_shots",
+    "HST": "home_shots_target",
+    "AST": "away_shots_target",
+}
+
 
 def season_code(start_year: int) -> str:
     """2025 -> '2526'."""
@@ -116,6 +132,27 @@ def normalize_results(df: pd.DataFrame, kind: str) -> pd.DataFrame:
     return out.sort_values("date").reset_index(drop=True)
 
 
+def normalize_match_stats(df: pd.DataFrame) -> pd.DataFrame:
+    """Wyniki + statystyki (rogi, kartki, faule, strzały, sędzia) z pliku ligi "main".
+
+    Kolumny statystyk, których brak w pliku, są pomijane; wiersze bez rogów i kartek odpadają.
+    """
+    base = normalize_results(df, "main")
+    named = df.rename(columns={"HomeTeam": "home_team", "AwayTeam": "away_team"}).copy()
+    named["date"] = pd.to_datetime(named["Date"], dayfirst=True, errors="coerce")
+    stats = [c for c in STAT_COLUMNS if c in named.columns]
+    extra = named[["date", "home_team", "away_team", *stats]].rename(columns=STAT_COLUMNS)
+    if "Referee" in named.columns:
+        extra["referee"] = named["Referee"].astype("string").str.strip()
+    out = base.merge(extra, on=["date", "home_team", "away_team"], how="left")
+    required = [c for c in ("home_corners", "away_corners", "home_yellow", "away_yellow") if c in out.columns]
+    out = out.dropna(subset=required)
+    for col in STAT_COLUMNS.values():
+        if col in out.columns:
+            out[col] = out[col].fillna(0).astype(int)
+    return out.sort_values("date").reset_index(drop=True)
+
+
 def load_results(league: League, n_seasons: int = 3, today: date | None = None) -> pd.DataFrame:
     """Rozegrane mecze z ostatnich n sezonów (ze świeżym cache dla bieżącego sezonu)."""
     seasons = recent_seasons(n_seasons, today)
@@ -129,3 +166,17 @@ def load_results(league: League, n_seasons: int = 3, today: date | None = None) 
         first = pd.Timestamp(year=seasons[0], month=7, day=1)
         df = df[df["date"] >= first]
     return df.drop(columns=["Season"], errors="ignore").reset_index(drop=True)
+
+
+def load_match_stats(league: League, n_seasons: int = 3, today: date | None = None) -> pd.DataFrame:
+    """Mecze ze statystykami (rogi, kartki, faule, strzały, sędzia) do modeli liczebności.
+
+    Ligi "extra" (POL) nie mają statystyk w football-data, więc zwracamy pusty DataFrame.
+    """
+    if league.football_data.kind == "extra":
+        log.info("Brak statystyk meczowych w football-data dla %s", league.football_data.code)
+        return pd.DataFrame(columns=[*RESULT_COLUMNS, *STAT_COLUMNS.values()])
+    frames = [normalize_match_stats(_read_csv(p)) for p in fetch_league_csvs(league, recent_seasons(n_seasons, today))]
+    if not frames:
+        return pd.DataFrame(columns=[*RESULT_COLUMNS, *STAT_COLUMNS.values()])
+    return pd.concat(frames, ignore_index=True).sort_values("date").reset_index(drop=True)

@@ -49,6 +49,7 @@ class Bookmaker(BaseModel):
     all_free_if_ako_share_gte: float | None = None
     odds_api_proxies: list[str] = Field(default_factory=list)
     verified_at: str | None = None
+    active: bool = True  # czy właściciel gra u tego buka (ADR 0021: domyślnie tylko STS)
 
 
 class BookmakersConfig(BaseModel):
@@ -68,6 +69,7 @@ class League(BaseModel):
     name: str
     odds_api_key: str
     football_data: FootballDataSource
+    sts_tournament_id: int | None = None  # id turnieju w feedzie STS (temat t_{id}_pl)
 
 
 class AkoConfig(BaseModel):
@@ -103,6 +105,16 @@ class Strategy(BaseModel):
     ako: AkoConfig = AkoConfig()
     odds_api: OddsApiConfig = OddsApiConfig()
     dixon_coles: DixonColesConfig = DixonColesConfig()
+    # Tryb „Typy dnia” (ADR 0021): ranking po edge przed podatkiem, podatek informacyjnie.
+    default_bookmaker: str = "sts"
+    daily_picks: int = 5
+    pick_flat_stake_pct: float = 0.005  # stawka dla typów bez przewagi po podatku
+    model_only_min_edge: float = 0.08  # próg edge dla rynków wycenianych tylko modelem
+    model_weight: float = 0.5  # model-only: p_fair = w·p_model + (1−w)·p_STS (zakotwiczenie w rynku)
+    count_totals_enabled: bool = False  # sumy rogów/kartek: model ≈ średnia ligi (kalibracja) → domyślnie off
+    model_only_max_odds: float = 3.5  # model-only: wyższe kursy pomijamy (model najmniej pewny w ogonach)
+    max_model_market_gap: float = 0.15  # |p_model − p_STS| powyżej → typ odrzucony (błąd modelu)
+    morning_days: int = 2
     leagues: dict[str, League]
 
 

@@ -1,6 +1,6 @@
 # ADR 0006: Strategia znajdowania przewagi
 
-- **Status:** Accepted
+- **Status:** Accepted, częściowo zastąpiony przez [ADR 0021](0021-sts-typy-dnia-rynki-dodatkowe.md) (właściciel gra tylko w STS: porównywanie kursów i AKO bez podatku nieaktywne)
 - **Data:** 2026-10-17
 
 ## Kontekst

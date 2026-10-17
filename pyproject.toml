@@ -16,6 +16,7 @@ dependencies = [
     "rich>=15.0.0",
     "shin>=0.2.2",
     "sports-betting>=0.15.1",
+    "websockets>=17.2",
 ]
 
 [build-system]

@@ -22,8 +22,10 @@ from rich.table import Table
 
 from betting_analyst import ledger
 from betting_analyst.config import DB_PATH, get_env, load_bookmakers, load_strategy
-from betting_analyst.domain import SELECTIONS
+from betting_analyst.domain import SELECTIONS, selections_for
+from betting_analyst.models.devig import devig
 from betting_analyst.scan import fair_price
+from betting_analyst.sources import sts
 from betting_analyst.sources.the_odds_api import MISSING_KEY_HELP, TheOddsApiClient, parse_events
 
 
@@ -38,6 +40,45 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def close_sts_model_bets(con, now: datetime, until: datetime, console: Console) -> int:
+    """Zamknięcie STS dla zakładów wycenianych modelem (rogi, kartki, inne linie goli — ADR 0021).
+
+    Pinnacle nie ma tych rynków, więc CLV liczymy względem zdewigowanego (multiplicative)
+    zamknięcia samego STS. To słabsza miara niż CLV vs Pinnacle — raportowana osobno.
+    """
+    pending = ledger.open_sts_model_bets(con, now, until)
+    if pending.empty:
+        return 0
+    fixtures = [
+        sts.StsFixture(
+            str(row.event_id).removeprefix("sts:"), 0, row.league, row.home_team, row.away_team,
+            row.commence_time.to_pydatetime() if hasattr(row.commence_time, "to_pydatetime") else row.commence_time,
+        )
+        for row in pending.itertuples()
+    ]  # fmt: skip
+    bodies, captured_at = sts.fetch_snapshots([sts.fixture_topic(f.fixture_id) for f in fixtures])
+    market_map = sts.load_market_map()
+    total = 0
+    for f in fixtures:
+        body = bodies.get(sts.fixture_topic(f.fixture_id))
+        if body is None:
+            console.print(f"[yellow]STS: brak oferty zamknięcia dla {f.home_team} – {f.away_team}[/]")
+            continue
+        quotes = sts.parse_fixture_quotes(body, f, captured_at, market_map)
+        ledger.insert_snapshots(con, quotes, is_closing=True)
+        by_market: dict[str, dict[str, float]] = {}
+        for q in quotes:
+            by_market.setdefault(q.market, {})[q.selection] = q.odds
+        for market, odds in by_market.items():
+            sels = selections_for(market)
+            if not all(s in odds for s in sels):
+                continue
+            probs = dict(zip(sels, devig([odds[s] for s in sels], "multiplicative"), strict=True))
+            total += ledger.record_closing(con, f.event_id, market, probs, captured_at, model_only=True)
+    console.print(f"[dim]Zamknięcie STS (rynki model-only): zaktualizowano CLV dla {total} zakładów[/]")
+    return total
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
@@ -48,8 +89,11 @@ def main(argv: list[str] | None = None) -> int:
     now = datetime.now(UTC)
     until = now + (timedelta(days=30) if args.all_open else timedelta(minutes=args.minutes_before))
     pending = ledger.open_bets_for_closing(con, now, until)
+    total_sts = close_sts_model_bets(con, now, until, console)
     if pending.empty:
-        console.print("Brak otwartych zakładów z meczem w oknie — nic do zrobienia (0 kredytów).")
+        msg = "Brak otwartych zakładów (rynek/Pinnacle) z meczem w oknie — 0 kredytów."
+        console.print(msg if not total_sts else f"{msg} Zamknięcie STS: {total_sts} zakładów.")
+        con.close()
         return 0
 
     if not get_env("ODDS_API_KEY"):

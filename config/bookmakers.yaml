@@ -15,16 +15,19 @@ bookmakers:
   sts:
     name: STS
     stake_tax: 0.12
+    active: true              # główny (praktycznie jedyny) buk właściciela — ADR 0021
     odds_api_proxies: []      # brak STS w The Odds API
     verified_at: null
 
   fortuna:
+    active: false             # nieaktywny (ADR 0021) — zostaje na przyszłość
     name: Fortuna
     stake_tax: 0.12
     odds_api_proxies: []
     verified_at: null
 
   betclic:
+    active: false             # nieaktywny (ADR 0021) — zostaje na przyszłość
     name: Betclic
     stake_tax: 0.12
     promo: "Gra bez podatku 2.0 (od 05.2026)"
@@ -41,6 +44,7 @@ bookmakers:
     verified_at: null         # źródło: strony afiliacyjne (meczyki.pl) — zweryfikuj regulamin
 
   superbet:
+    active: false             # nieaktywny (ADR 0021) — zostaje na przyszłość
     name: Superbet
     stake_tax: 0.12
     odds_api_proxies: []
