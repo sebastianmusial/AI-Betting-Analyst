@@ -28,7 +28,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from betting_analyst import ledger
+from betting_analyst import budget, ledger
 from betting_analyst.config import (
     DB_PATH,
     SCANS_DIR,
@@ -710,7 +710,7 @@ def main(argv: list[str] | None = None) -> int:
         if not get_env("ODDS_API_KEY"):
             console.print(Panel(MISSING_KEY_HELP, title="Brak klucza The Odds API", style="yellow"))
             return 2
-        client = TheOddsApiClient()
+        client = TheOddsApiClient(usage_log=budget.USAGE_LOG, job="scan")
 
     quotes, used, remaining, fetch_warnings = collect_quotes(leagues, strategy, args.from_cache, client)
     manual = manual_odds.load_manual_quotes(args.date)

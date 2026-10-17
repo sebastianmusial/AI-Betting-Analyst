@@ -1,13 +1,15 @@
 """Raport CLV zakładów paper (główny KPI: CLV vs zdewigowane zamknięcie Pinnacle).
 
-uv run python -m betting_analyst.report [--last 20]
+uv run python -m betting_analyst.report [--last 20] [--notify]
 """
 
 from __future__ import annotations
 
 import argparse
+import logging
 import math
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -43,8 +45,11 @@ PCT_COLS = {"avg_clv_pct", "avg_clv_eff_pct", "share_positive", "avg_ev_at_bet",
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m betting_analyst.report", description="Raport CLV (paper).")
     parser.add_argument("--last", type=int, default=20, help="ile ostatnich zakładów pokazać")
+    parser.add_argument("--notify", action="store_true", help="wyślij krótkie CLV dnia na Telegram (notify.py)")
     parser.add_argument("--db", type=Path, default=DB_PATH, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if args.notify:
+        _send_notification(args.db)
 
     console = Console()
     con = ledger.connect(args.db)
@@ -83,6 +88,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     con.close()
     return 0
+
+
+def _send_notification(db_path: Path) -> None:
+    """Krótkie CLV na Telegram; błąd powiadomienia nie przerywa raportu."""
+    from betting_analyst import notify
+
+    try:
+        notify.notify_evening(datetime.now(notify.LOCAL_TZ).date(), db_path)
+    except Exception as exc:
+        logging.getLogger("betting_analyst.report").warning("Telegram: nie wysłano CLV (%s)", exc)
 
 
 if __name__ == "__main__":

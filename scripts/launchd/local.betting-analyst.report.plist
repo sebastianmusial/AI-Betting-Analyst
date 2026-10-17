@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 23:30 codziennie: raport CLV do reports/RRRR-MM-DD-clv.txt + krótkie CLV na Telegram.
+     Szablon: __REPO__ podmienia scripts/launchd/install.sh. Instrukcja: docs/automation.md -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.betting-analyst.report</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>__REPO__/scripts/run_job.sh</string>
+        <string>report</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>__REPO__</string>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key><integer>23</integer>
+        <key>Minute</key><integer>30</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>__REPO__/data/logs/launchd-report.log</string>
+    <key>StandardErrorPath</key>
+    <string>__REPO__/data/logs/launchd-report.log</string>
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

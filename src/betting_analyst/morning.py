@@ -1,6 +1,6 @@
 """Morning Scout — „Typy dnia” z oferty STS (ADR 0021).
 
-    uv run python -m betting_analyst.morning [--days 2] [--log-paper] [--from-cache] [--top 5]
+    uv run python -m betting_analyst.morning [--days 2] [--log-paper] [--from-cache] [--top 5] [--notify]
 
 Przepływ:
 1. oferta STS (publiczny feed WebSocket) dla meczów z horyzontu — 1X2, gole, BTTS, rogi, kartki,
@@ -28,7 +28,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from betting_analyst import ledger
+from betting_analyst import budget, ledger
 from betting_analyst.config import (
     DB_PATH,
     REPORTS_DIR,
@@ -463,6 +463,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--log-paper", action="store_true", help="zapisz typy jako zakłady paper")
     parser.add_argument("--from-cache", action="store_true", help="STS i The Odds API z cache (0 kredytów, bez sieci)")
     parser.add_argument("--no-pinnacle", action="store_true", help="bez The Odds API (tylko modele)")
+    parser.add_argument("--notify", action="store_true", help="wyślij skrót typów na Telegram (notify.py)")
     parser.add_argument("--show-all", action="store_true", help="pokaż 30 najlepszych selekcji (przed regułą 1/mecz)")
     parser.add_argument("--db", type=Path, default=DB_PATH, help=argparse.SUPPRESS)
     return parser.parse_args(argv)
@@ -499,7 +500,7 @@ def main(argv: list[str] | None = None) -> int:
         client = None
         if not args.from_cache:
             if get_env("ODDS_API_KEY"):
-                client = TheOddsApiClient()
+                client = TheOddsApiClient(usage_log=budget.USAGE_LOG, job="morning")
             else:
                 console.print(Panel(MISSING_KEY_HELP, title="Brak klucza The Odds API — tylko modele", style="yellow"))
         if client or args.from_cache:
@@ -559,12 +560,27 @@ def main(argv: list[str] | None = None) -> int:
             n += 1
         console.print(f"[bold green]Zapisano {n} typów jako paper bets do {args.db}[/]")
     con.close()
+    if args.notify:
+        _send_notification(today_local, args.db, console)
     return 0
+
+
+def _send_notification(day, db_path: Path, console: Console) -> None:
+    """Skrót na Telegram; błąd powiadomienia nie psuje skanu (raport i ledger są już zapisane)."""
+    from betting_analyst import notify
+
+    try:
+        sent = notify.notify_morning(day, db_path)
+    except Exception as exc:
+        log.warning("Telegram: nie wysłano skrótu (%s)", exc)
+        sent = False
+    console.print("[dim]Telegram: wysłano skrót typów[/]" if sent else "[dim]Telegram: pominięto[/]")
 
 
 def _pick_json(p: Pick, strategy: Strategy) -> dict:
     return {
         "fixture_id": p.fixture.fixture_id,
+        "event_id": p.fixture.event_id,
         "league": p.fixture.league,
         "commence_time": p.fixture.commence_time.isoformat(),
         "match": f"{p.fixture.home_team} – {p.fixture.away_team}",

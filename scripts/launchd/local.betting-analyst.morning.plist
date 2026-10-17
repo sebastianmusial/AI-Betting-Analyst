@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 08:00 codziennie: Morning Scout (skan STS + Pinnacle, paper bets, skrót na Telegram).
+     Szablon: __REPO__ podmienia scripts/launchd/install.sh. Instrukcja: docs/automation.md -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.betting-analyst.morning</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>__REPO__/scripts/run_job.sh</string>
+        <string>morning</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>__REPO__</string>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key><integer>8</integer>
+        <key>Minute</key><integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>__REPO__/data/logs/launchd-morning.log</string>
+    <key>StandardErrorPath</key>
+    <string>__REPO__/data/logs/launchd-morning.log</string>
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>
