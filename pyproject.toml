@@ -32,6 +32,7 @@ dev = [
 ba-scan = "betting_analyst.scan:main"
 ba-closing = "betting_analyst.closing:main"
 ba-report = "betting_analyst.report:main"
+ba-backtest = "betting_analyst.backtest.report:main"
 
 [tool.ruff]
 line-length = 120

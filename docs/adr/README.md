@@ -25,6 +25,7 @@ Format: uproszczony MADR, opisany w [ADR 0000](0000-rejestrowanie-decyzji-adr.md
 | [0018](0018-ruch-kursow-steam.md) | Ruch kursów (steam) | Proposed |
 | [0019](0019-wykorzystanie-open-source.md) | Wykorzystanie open source | Accepted |
 | [0020](0020-narzedzia-claude-code.md) | Narzędzia Claude Code | Accepted |
+| [0021](0021-wyniki-f2-przewaga-tylko-bez-podatku.md) | Wyniki F2: przewaga tylko bez podatku i przy kursach z górnej granicy rynku | Accepted |
 
 ## Szablon
 

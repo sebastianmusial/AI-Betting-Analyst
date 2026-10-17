@@ -46,8 +46,16 @@ class DixonColesForecaster:
         }
 
 
-def fit_dixon_coles(results: pd.DataFrame, league: str, xi: float = 0.0018) -> DixonColesForecaster:
-    """Dopasowuje model na DataFrame z kolumnami: date, home_team, away_team, home_goals, away_goals."""
+def fit_dixon_coles(
+    results: pd.DataFrame,
+    league: str,
+    xi: float = 0.0018,
+    fitted_at: datetime | None = None,
+) -> DixonColesForecaster:
+    """Dopasowuje model na DataFrame z kolumnami: date, home_team, away_team, home_goals, away_goals.
+
+    `fitted_at` pozwala w backteście zapisać datę „as-of” zamiast bieżącej.
+    """
     if len(results) < 100:
         raise ValueError(f"Za mało meczów do dopasowania DC dla {league}: {len(results)}")
     weights = pb.models.dixon_coles_weights(results["date"], xi)
@@ -66,6 +74,6 @@ def fit_dixon_coles(results: pd.DataFrame, league: str, xi: float = 0.0018) -> D
         model=model,
         teams=teams,
         n_matches=len(results),
-        fitted_at=datetime.now(UTC),
+        fitted_at=fitted_at or datetime.now(UTC),
         last_match=results["date"].max(),
     )
